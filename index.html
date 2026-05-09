@@ -6,6 +6,7 @@
 <title>Global Booster — Social Media Growth Services</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Mulish:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --primary: #1A56DB;
@@ -1318,6 +1319,89 @@ const SERVICES = {
   }
 };
 
+// ═══════════════════════════════════ SUPABASE ════════════════════════════════
+/*
+  Run this SQL in your Supabase SQL Editor to create the required tables:
+
+  create table if not exists users (
+    id text primary key,
+    name text,
+    email text unique,
+    password text,
+    balance numeric default 0,
+    "referralCode" text,
+    referrals integer default 0,
+    "referralEarned" numeric default 0,
+    "joinDate" text,
+    "referredBy" text
+  );
+
+  create table if not exists orders (
+    id text primary key,
+    "userId" text,
+    "userName" text,
+    platform text,
+    service text,
+    quality text,
+    quantity integer,
+    link text,
+    price numeric,
+    status text default 'Processing',
+    date text,
+    created_at timestamp default now()
+  );
+
+  create table if not exists claim_codes (
+    code text primary key,
+    amount numeric,
+    used boolean default false,
+    "usedBy" text,
+    "forUser" text
+  );
+
+  create table if not exists fund_requests (
+    id bigint generated always as identity primary key,
+    "userId" text,
+    "userName" text,
+    amount numeric,
+    time text,
+    status text
+  );
+
+  create table if not exists login_activity (
+    id bigint generated always as identity primary key,
+    time text,
+    type text,
+    "userId" text,
+    name text,
+    email text
+  );
+
+  -- Seed default claim codes (run once)
+  insert into claim_codes (code, amount, used, "usedBy") values
+    ('WELCOME50', 50, false, null),
+    ('BOOST100', 100, false, null),
+    ('START25', 25, false, null)
+  on conflict (code) do nothing;
+
+  -- Disable RLS or add policies as needed for your anon key
+  alter table users enable row level security;
+  alter table orders enable row level security;
+  alter table claim_codes enable row level security;
+  alter table fund_requests enable row level security;
+  alter table login_activity enable row level security;
+
+  create policy "Allow all" on users for all using (true) with check (true);
+  create policy "Allow all" on orders for all using (true) with check (true);
+  create policy "Allow all" on claim_codes for all using (true) with check (true);
+  create policy "Allow all" on fund_requests for all using (true) with check (true);
+  create policy "Allow all" on login_activity for all using (true) with check (true);
+*/
+
+const SUPABASE_URL = 'https://urmoibcoryilntvgugao.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVybW9pYmNvcnlpbG50dmd1Z2FvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTU3MTUsImV4cCI6MjA5MzgzMTcxNX0.TxzsU03vik_qaTS96KCr0yY0Mt99buvTUx67z2bp5Zk';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // ═══════════════════════════════════ STATE ═══════════════════════════════════
 let currentPlatform = '';
 let currentService = null;
@@ -1326,29 +1410,66 @@ let selectedFundAmount = 0;
 let logoClickCount = 0;
 let logoClickTimer = null;
 
-function getUsers() { return JSON.parse(localStorage.getItem('gb_users') || '[]'); }
-function saveUsers(u) { localStorage.setItem('gb_users', JSON.stringify(u)); }
-function getOrders() { return JSON.parse(localStorage.getItem('gb_orders') || '[]'); }
-function saveOrders(o) { localStorage.setItem('gb_orders', JSON.stringify(o)); }
-function getCodes() { return JSON.parse(localStorage.getItem('gb_codes') || JSON.stringify([
-  { code: 'WELCOME50', amount: 50, used: false, usedBy: null },
-  { code: 'BOOST100', amount: 100, used: false, usedBy: null },
-  { code: 'START25', amount: 25, used: false, usedBy: null }
-])); }
-function saveCodes(c) { localStorage.setItem('gb_codes', JSON.stringify(c)); }
-function getFundRequests() { return JSON.parse(localStorage.getItem('gb_funds') || '[]'); }
-function saveFundRequests(f) { localStorage.setItem('gb_funds', JSON.stringify(f)); }
-function getLoginActivity() { return JSON.parse(localStorage.getItem('gb_login_activity') || '[]'); }
-function saveLoginActivity(a) { localStorage.setItem('gb_login_activity', JSON.stringify(a)); }
-function logLoginActivity(type, user) {
-  const activity = getLoginActivity();
-  activity.unshift({ time: new Date().toLocaleString(), type, userId: user.id, name: user.name, email: user.email });
-  if (activity.length > 200) activity.length = 200; // cap at 200 entries
-  saveLoginActivity(activity);
+// ─── DATA LAYER (Supabase) ───
+async function getUsers() {
+  const { data, error } = await supabase.from('users').select('*');
+  if (error) { console.error('getUsers:', error); return []; }
+  return data || [];
 }
-function getCurrentUser() { const id = localStorage.getItem('gb_currentUser'); if (!id) return null; return getUsers().find(u => u.id === id) || null; }
-function setCurrentUser(u) { if (u) localStorage.setItem('gb_currentUser', u.id); else localStorage.removeItem('gb_currentUser'); }
-function updateUser(updated) { const users = getUsers(); const idx = users.findIndex(u => u.id === updated.id); if (idx > -1) { users[idx] = updated; saveUsers(users); } }
+
+async function getOrders() {
+  const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+  if (error) { console.error('getOrders:', error); return []; }
+  return data || [];
+}
+
+async function getCodes() {
+  const { data, error } = await supabase.from('claim_codes').select('*');
+  if (error) { console.error('getCodes:', error); return []; }
+  return data || [];
+}
+
+async function getFundRequests() {
+  const { data, error } = await supabase.from('fund_requests').select('*').order('id', { ascending: false });
+  if (error) { console.error('getFundRequests:', error); return []; }
+  return data || [];
+}
+
+async function getLoginActivity() {
+  const { data, error } = await supabase.from('login_activity').select('*').order('id', { ascending: false }).limit(200);
+  if (error) { console.error('getLoginActivity:', error); return []; }
+  return data || [];
+}
+
+async function getCurrentUser() {
+  const id = localStorage.getItem('gb_currentUser');
+  if (!id) return null;
+  const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
+  if (error) return null;
+  return data || null;
+}
+
+function setCurrentUser(u) {
+  if (u) localStorage.setItem('gb_currentUser', u.id);
+  else localStorage.removeItem('gb_currentUser');
+}
+
+async function updateUser(updated) {
+  const { error } = await supabase.from('users').upsert(updated);
+  if (error) console.error('updateUser:', error);
+}
+
+async function logLoginActivity(type, user) {
+  await supabase.from('login_activity').insert({
+    time: new Date().toLocaleString(), type,
+    userId: user.id, name: user.name, email: user.email
+  });
+}
+
+async function generateId() {
+  const { count } = await supabase.from('users').select('*', { count: 'exact', head: true });
+  return 'GB' + (1001 + (count || 0));
+}
 
 // ═══════════════════════════════════ AUTH ═══════════════════════════════════
 function openAuth(tab) { openModal('authModal'); switchAuthTab(tab); }
@@ -1359,52 +1480,60 @@ function switchAuthTab(tab) {
   document.getElementById('registerForm').style.display = tab === 'register' ? '' : 'none';
 }
 
-function generateId() { return 'GB' + (1000 + getUsers().length + 1); }
 function generateRefCode() { return 'REF' + Math.random().toString(36).substring(2,8).toUpperCase(); }
 
-function registerUser() {
+async function registerUser() {
   const name = document.getElementById('regName').value.trim();
   const email = document.getElementById('regEmail').value.trim().toLowerCase();
   const pass = document.getElementById('regPassword').value;
   const refCode = document.getElementById('regRefCode').value.trim().toUpperCase();
   if (!name || !email || !pass) return toast('Please fill all fields', 'error');
   if (pass.length < 6) return toast('Password must be at least 6 characters', 'error');
-  const users = getUsers();
-  if (users.find(u => u.email === email)) return toast('Email already registered', 'error');
-  
-  const newUser = { id: generateId(), name, email, password: pass, balance: 0, referralCode: generateRefCode(), referrals: 0, referralEarned: 0, joinDate: new Date().toLocaleDateString() };
-  
+
+  // Check if email exists
+  const { data: existing } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
+  if (existing) return toast('Email already registered', 'error');
+
+  const newId = await generateId();
+  const newUser = {
+    id: newId, name, email, password: pass, balance: 0,
+    referralCode: generateRefCode(), referrals: 0, referralEarned: 0,
+    joinDate: new Date().toLocaleDateString(), referredBy: refCode || null
+  };
+
   // Handle referral
   if (refCode) {
-    const referrer = users.find(u => u.referralCode === refCode);
+    const { data: referrer } = await supabase.from('users').select('*').eq('referralCode', refCode).maybeSingle();
     if (referrer && referrer.referrals < 10) {
-      referrer.referrals++;
-      referrer.referralEarned += 3;
-      referrer.balance += 3;
-      newUser.balance += 2;
-      const idx = users.findIndex(u => u.id === referrer.id);
-      users[idx] = referrer;
+      await supabase.from('users').update({
+        referrals: referrer.referrals + 1,
+        referralEarned: +(referrer.referralEarned + 3).toFixed(2),
+        balance: +(referrer.balance + 3).toFixed(2)
+      }).eq('id', referrer.id);
+      newUser.balance = 2;
     }
   }
-  
-  users.push(newUser);
-  saveUsers(users);
+
+  const { error } = await supabase.from('users').insert(newUser);
+  if (error) { console.error(error); return toast('Registration failed. Try again.', 'error'); }
+
   setCurrentUser(newUser);
-  logLoginActivity('Register', newUser);
+  await logLoginActivity('Register', newUser);
   closeModal('authModal');
   toast('Account created! Welcome to Global Booster 🚀', 'success');
   onUserLogin(newUser);
 }
 
-function loginUser() {
+async function loginUser() {
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   const pass = document.getElementById('loginPassword').value;
   if (!email || !pass) return toast('Please fill all fields', 'error');
-  const users = getUsers();
-  const user = users.find(u => u.email === email && u.password === pass);
-  if (!user) return toast('Invalid email or password', 'error');
+
+  const { data: user, error } = await supabase.from('users').select('*').eq('email', email).eq('password', pass).maybeSingle();
+  if (error || !user) return toast('Invalid email or password', 'error');
+
   setCurrentUser(user);
-  logLoginActivity('Login', user);
+  await logLoginActivity('Login', user);
   closeModal('authModal');
   toast('Welcome back, ' + user.name.split(' ')[0] + '! 👋', 'success');
   onUserLogin(user);
@@ -1432,19 +1561,19 @@ function logout() {
   toast('Logged out successfully', 'info');
 }
 
-function toggleUserMenu() {
-  const user = getCurrentUser();
+async function toggleUserMenu() {
+  const user = await getCurrentUser();
   if (user) showPage('dashboard');
 }
 
 // ═══════════════════════════════════ PAGES ═══════════════════════════════════
-function showPage(page) {
+async function showPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const el = document.getElementById('page-' + page);
   if (el) el.classList.add('active');
   
   if (page === 'dashboard') {
-    const user = getCurrentUser();
+    const user = await getCurrentUser();
     if (!user) { openAuth('login'); showPage('home'); return; }
     loadDashboard(user);
   }
@@ -1599,8 +1728,8 @@ function resetSummary() {
   document.getElementById('warningBox').style.display = 'none';
 }
 
-function placeOrder() {
-  const user = getCurrentUser();
+async function placeOrder() {
+  const user = await getCurrentUser();
   if (!user) { openAuth('login'); toast('Please sign in to place an order', 'info'); return; }
   
   const platform = document.getElementById('platformSelect').value;
@@ -1629,42 +1758,30 @@ function placeOrder() {
   }
   
   // Deduct balance
-  user.balance = +(user.balance - total).toFixed(2);
-  updateUser(user);
-  updateNavUser(user);
+  const newBalance = +(user.balance - total).toFixed(2);
+  await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+  const updatedUser = { ...user, balance: newBalance };
+  updateNavUser(updatedUser);
   
   // Create order
   const orderId = 'GB' + Date.now().toString().slice(-6);
   const order = {
-    id: orderId,
-    userId: user.id,
-    userName: user.name,
-    platform: SERVICES[platform].name,
-    service: svc.name,
+    id: orderId, userId: user.id, userName: user.name,
+    platform: SERVICES[platform].name, service: svc.name,
     quality: svc.isComment ? 'Custom' : (currentQuality === 'premium' ? 'Premium' : 'Average'),
-    quantity: qty,
-    link,
-    price: total,
-    status: 'Processing',
+    quantity: qty, link, price: total, status: 'Processing',
     date: new Date().toLocaleDateString()
   };
   
-  const orders = getOrders();
-  orders.unshift(order);
-  saveOrders(orders);
+  await supabase.from('orders').insert(order);
   
   // WhatsApp notification to admin
   const msg = encodeURIComponent(
     `🆕 NEW ORDER — Global Booster\n\n` +
-    `Order ID: ${orderId}\n` +
-    `User: ${user.name} (${user.id})\n` +
-    `Platform: ${SERVICES[platform].name}\n` +
-    `Service: ${svc.name}\n` +
-    `Quality: ${order.quality}\n` +
-    `Quantity: ${qty.toLocaleString()}\n` +
-    `Link: ${link}\n` +
-    `Amount: ${total} GHS\n` +
-    `Date: ${order.date}`
+    `Order ID: ${orderId}\nUser: ${user.name} (${user.id})\n` +
+    `Platform: ${SERVICES[platform].name}\nService: ${svc.name}\n` +
+    `Quality: ${order.quality}\nQuantity: ${qty.toLocaleString()}\n` +
+    `Link: ${link}\nAmount: ${total} GHS\nDate: ${order.date}`
   );
   window.open('https://wa.me/' + WHATSAPP_NUMBER + '?text=' + msg, '_blank');
   
@@ -1674,13 +1791,13 @@ function placeOrder() {
 }
 
 // ═══════════════════════════════════ DASHBOARD ═══════════════════════════════
-function loadDashboard(user) {
+async function loadDashboard(user) {
   document.getElementById('dashUserName').textContent = user.name;
   document.getElementById('dashUserId').textContent = user.id;
   document.getElementById('dashBalance').textContent = parseFloat(user.balance).toFixed(2);
   document.getElementById('payUserId').textContent = user.id;
   
-  const orders = getOrders().filter(o => o.userId === user.id);
+  const orders = (await getOrders()).filter(o => o.userId === user.id);
   document.getElementById('dashOrderCount').textContent = orders.length;
   document.getElementById('dashReferralCount').textContent = user.referrals || 0;
   document.getElementById('dashReferralEarned').textContent = parseFloat(user.referralEarned || 0).toFixed(2);
@@ -1712,38 +1829,41 @@ function loadDashboard(user) {
   }
 }
 
-function copyRefCode() {
-  const user = getCurrentUser();
+async function copyRefCode() {
+  const user = await getCurrentUser();
   if (!user) return;
   navigator.clipboard.writeText(user.referralCode).then(() => toast('Referral code copied!', 'success'));
 }
 
-function copyRefLink() {
-  const user = getCurrentUser();
+async function copyRefLink() {
+  const user = await getCurrentUser();
   if (!user) return;
   const link = window.location.href.split('?')[0] + '?ref=' + user.referralCode;
   navigator.clipboard.writeText(link).then(() => toast('Referral link copied!', 'success'));
 }
 
 // ═══════════════════════════════════ CLAIM CODE ═══════════════════════════════
-function doClaimCode(inputId) {
-  const user = getCurrentUser();
+async function doClaimCode(inputId) {
+  const user = await getCurrentUser();
   if (!user) { openAuth('login'); return; }
   const code = document.getElementById(inputId).value.trim().toUpperCase();
   if (!code) return toast('Please enter a code', 'error');
   
-  const codes = getCodes();
-  const found = codes.find(c => c.code === code && !c.used);
-  if (!found) return toast('Invalid or already used code', 'error');
+  const { data: found, error } = await supabase.from('claim_codes')
+    .select('*').eq('code', code).eq('used', false).maybeSingle();
+  if (error || !found) return toast('Invalid or already used code', 'error');
   
-  found.used = true;
-  found.usedBy = user.id;
-  saveCodes(codes);
+  // Mark code as used
+  await supabase.from('claim_codes').update({ used: true, usedBy: user.id }).eq('code', code);
   
-  user.balance = +(user.balance + found.amount).toFixed(2);
-  updateUser(user);
-  updateNavUser(user);
-  if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(getCurrentUser());
+  // Credit user
+  const newBalance = +(user.balance + found.amount).toFixed(2);
+  await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+  const updatedUser = { ...user, balance: newBalance };
+  updateNavUser(updatedUser);
+  
+  const activePage = document.getElementById('page-dashboard');
+  if (activePage && activePage.classList.contains('active')) loadDashboard(updatedUser);
   
   document.getElementById(inputId).value = '';
   toast(`✅ Code redeemed! ${found.amount} GHS added to your wallet.`, 'success');
@@ -1753,8 +1873,8 @@ function claimCode() { doClaimCode('claimCodeInput'); }
 function claimCodeDash() { doClaimCode('dashClaimCode'); }
 
 // ═══════════════════════════════════ ADD FUNDS ═══════════════════════════════
-function openAddFunds() {
-  const user = getCurrentUser();
+async function openAddFunds() {
+  const user = await getCurrentUser();
   if (!user) { openAuth('login'); return; }
   document.getElementById('modalUserId').textContent = user.id;
   openModal('addFundsModal');
@@ -1774,56 +1894,47 @@ function selectModalPreset(el, amt) {
   selectedFundAmount = amt;
 }
 
-function proceedToPaystack() {
+async function proceedToPaystack() {
   const amt = parseFloat(document.getElementById('addFundsAmt').value);
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   if (!user) return;
   if (!amt || amt < 5) return toast('Minimum amount is 5 GHS', 'error');
   
-  // Credit balance immediately
-  user.balance = +(user.balance + amt).toFixed(2);
-  updateUser(user);
-  updateNavUser(user);
-  if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(getCurrentUser());
+  // Credit balance
+  const newBalance = +(user.balance + amt).toFixed(2);
+  await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+  const updatedUser = { ...user, balance: newBalance };
+  updateNavUser(updatedUser);
+  if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(updatedUser);
   
-  // Log fund request as completed
-  const reqs = getFundRequests();
-  reqs.unshift({ userId: user.id, userName: user.name, amount: amt, time: new Date().toLocaleString(), status: 'Completed' });
-  saveFundRequests(reqs);
+  // Log fund request
+  await supabase.from('fund_requests').insert({ userId: user.id, userName: user.name, amount: amt, time: new Date().toLocaleString(), status: 'Completed' });
   
   // Notify admin
   const msg = encodeURIComponent(`💰 FUND ADDED — Global Booster\n\nUser: ${user.name}\nID: ${user.id}\nAmount: ${amt} GHS\nTime: ${new Date().toLocaleString()}\n\nFunds have been credited to the user's account.`);
   window.open('https://wa.me/' + WHATSAPP_NUMBER + '?text=' + msg, '_blank');
   
-  // Redirect to Paystack
-  setTimeout(() => {
-    window.open(PAYSTACK_URL + '?ref=' + user.id + '&amount=' + amt, '_blank');
-  }, 500);
-  
+  setTimeout(() => { window.open(PAYSTACK_URL + '?ref=' + user.id + '&amount=' + amt, '_blank'); }, 500);
   toast(`✅ ${amt} GHS has been added to your wallet!`, 'success');
 }
 
-function confirmAddFunds() {
+async function confirmAddFunds() {
   const amt = parseFloat(document.getElementById('modalFundsAmt').value);
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   if (!user) return;
   if (!amt || amt < 5) return toast('Minimum amount is 5 GHS', 'error');
   
-  // Credit balance immediately
-  user.balance = +(user.balance + amt).toFixed(2);
-  updateUser(user);
-  updateNavUser(user);
-  if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(getCurrentUser());
+  // Credit balance
+  const newBalance = +(user.balance + amt).toFixed(2);
+  await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+  const updatedUser = { ...user, balance: newBalance };
+  updateNavUser(updatedUser);
+  if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(updatedUser);
   
-  // Log fund request as completed
-  const reqs = getFundRequests();
-  reqs.unshift({ userId: user.id, userName: user.name, amount: amt, time: new Date().toLocaleString(), status: 'Completed' });
-  saveFundRequests(reqs);
+  // Log fund request
+  await supabase.from('fund_requests').insert({ userId: user.id, userName: user.name, amount: amt, time: new Date().toLocaleString(), status: 'Completed' });
   
-  setTimeout(() => {
-    window.open(PAYSTACK_URL + '?ref=' + user.id + '&amount=' + amt, '_blank');
-  }, 500);
-  
+  setTimeout(() => { window.open(PAYSTACK_URL + '?ref=' + user.id + '&amount=' + amt, '_blank'); }, 500);
   closeModal('addFundsModal');
   toast(`✅ ${amt} GHS has been added to your wallet!`, 'success');
 }
@@ -1848,10 +1959,10 @@ function adminLogin() {
   loadAdmin();
 }
 
-function loadAdmin() {
-  const users = getUsers();
-  const orders = getOrders();
-  const funds = getFundRequests();
+async function loadAdmin() {
+  const users = await getUsers();
+  const orders = await getOrders();
+  const funds = await getFundRequests();
   const revenue = orders.reduce((s, o) => s + (parseFloat(o.price) || 0), 0).toFixed(2);
   const pending = orders.filter(o => o.status === 'Processing').length;
   const totalFunded = funds.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0).toFixed(2);
@@ -1862,7 +1973,6 @@ function loadAdmin() {
   document.getElementById('adminRevenue').textContent = revenue + ' GHS';
   document.getElementById('adminPending').textContent = pending;
 
-  // Extra stats
   const extraEl = document.getElementById('adminExtraStats');
   if (extraEl) {
     extraEl.innerHTML = `
@@ -1873,7 +1983,6 @@ function loadAdmin() {
     `;
   }
 
-  // Recent users
   const recentUsersEl = document.getElementById('adminRecentUsers');
   if (recentUsersEl) {
     const recent = [...users].reverse().slice(0, 5);
@@ -1891,10 +2000,9 @@ function loadAdmin() {
     `).join('') : '<p style="color:var(--text-muted);font-size:13px">No users yet</p>';
   }
 
-  // Recent orders
   const recentOrdersEl = document.getElementById('adminRecentOrders');
   if (recentOrdersEl) {
-    const recent = [...orders].reverse().slice(0, 5);
+    const recent = [...orders].slice(0, 5);
     recentOrdersEl.innerHTML = recent.length ? recent.map(o => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
         <div>
@@ -1908,10 +2016,10 @@ function loadAdmin() {
       </div>
     `).join('') : '<p style="color:var(--text-muted);font-size:13px">No orders yet</p>';
   }
-  // Recent login activity
+
   const recentActivityEl = document.getElementById('adminRecentActivity');
   if (recentActivityEl) {
-    const activity = getLoginActivity().slice(0, 5);
+    const activity = (await getLoginActivity()).slice(0, 5);
     recentActivityEl.innerHTML = activity.length ? activity.map(a => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
         <div style="display:flex;align-items:center;gap:10px">
@@ -1940,8 +2048,8 @@ function switchAdminTab(tab, el) {
   if (tab === 'activity') loadLoginActivity();
 }
 
-function loadAdminOrders() {
-  const orders = getOrders();
+async function loadAdminOrders() {
+  const orders = await getOrders();
   const tbody = document.getElementById('adminOrdersBody');
   tbody.innerHTML = orders.map(o => `
     <tr>
@@ -1959,15 +2067,14 @@ function loadAdminOrders() {
   `).join('') || '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted)">No orders</td></tr>';
 }
 
-function updateOrderStatus(orderId, status) {
-  const orders = getOrders();
-  const idx = orders.findIndex(o => o.id === orderId);
-  if (idx > -1) { orders[idx].status = status; saveOrders(orders); loadAdminOrders(); toast('Order updated', 'success'); }
+async function updateOrderStatus(orderId, status) {
+  const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+  if (!error) { loadAdminOrders(); toast('Order updated', 'success'); }
 }
 
-function loadAdminUsers() {
-  let users = getUsers();
-  const orders = getOrders();
+async function loadAdminUsers() {
+  let users = await getUsers();
+  const orders = await getOrders();
   const search = (document.getElementById('userSearchInput') || {}).value || '';
   if (search) {
     const q = search.toLowerCase();
@@ -2000,32 +2107,30 @@ function loadAdminUsers() {
   }).join('') || '<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--text-muted)">No users found</td></tr>';
 }
 
-function adminDebitUser(userId) {
+async function adminDebitUser(userId) {
   const amount = prompt('Enter amount to DEBIT from ' + userId + ' (GHS):');
   if (!amount || isNaN(amount) || parseFloat(amount) <= 0) return;
-  const users = getUsers();
-  const idx = users.findIndex(u => u.id === userId);
-  if (idx > -1) {
-    users[idx].balance = Math.max(0, +(users[idx].balance - parseFloat(amount)).toFixed(2));
-    saveUsers(users);
-    loadAdminUsers();
-    const cu = getCurrentUser();
-    if (cu && cu.id === userId) {
-      updateNavUser(users[idx]);
-      if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(users[idx]);
-    }
-    toast('Debited ' + amount + ' GHS from ' + userId, 'success');
+  const { data: u } = await supabase.from('users').select('*').eq('id', userId).single();
+  if (!u) return;
+  const newBalance = Math.max(0, +(u.balance - parseFloat(amount)).toFixed(2));
+  await supabase.from('users').update({ balance: newBalance }).eq('id', userId);
+  loadAdminUsers();
+  const cu = await getCurrentUser();
+  if (cu && cu.id === userId) {
+    updateNavUser({ ...u, balance: newBalance });
+    if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard({ ...u, balance: newBalance });
   }
+  toast('Debited ' + amount + ' GHS from ' + userId, 'success');
 }
 
-function viewUserDetail(userId) {
-  const users = getUsers();
-  const orders = getOrders();
+async function viewUserDetail(userId) {
+  const users = await getUsers();
+  const orders = await getOrders();
   const u = users.find(u => u.id === userId);
   if (!u) return;
   const userOrders = orders.filter(o => o.userId === userId);
   const totalSpent = userOrders.reduce((s, o) => s + (parseFloat(o.price) || 0), 0).toFixed(2);
-  const funds = getFundRequests().filter(r => r.userId === userId);
+  const funds = (await getFundRequests()).filter(r => r.userId === userId);
   const totalFunded = funds.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0).toFixed(2);
 
   document.getElementById('detailUserTitle').textContent = '👤 ' + u.name + ' (' + u.id + ')';
@@ -2060,29 +2165,25 @@ function viewUserDetail(userId) {
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function adminCreditUser(userId) {
+async function adminCreditUser(userId) {
   const amount = prompt('Enter amount to credit to ' + userId + ' (GHS):');
   if (!amount || isNaN(amount)) return;
-  const users = getUsers();
-  const idx = users.findIndex(u => u.id === userId);
-  if (idx > -1) {
-    users[idx].balance = +(users[idx].balance + parseFloat(amount)).toFixed(2);
-    saveUsers(users);
-    loadAdminUsers();
-    
-    // Refresh dashboard if user is viewing it
-    const cu = getCurrentUser();
-    if (cu && cu.id === userId) {
-      const updated = users[idx];
-      updateNavUser(updated);
-      if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(updated);
-    }
-    toast('Credited ' + amount + ' GHS to ' + userId, 'success');
+  const { data: u } = await supabase.from('users').select('*').eq('id', userId).single();
+  if (!u) return;
+  const newBalance = +(u.balance + parseFloat(amount)).toFixed(2);
+  await supabase.from('users').update({ balance: newBalance }).eq('id', userId);
+  loadAdminUsers();
+  const cu = await getCurrentUser();
+  if (cu && cu.id === userId) {
+    const updated = { ...u, balance: newBalance };
+    updateNavUser(updated);
+    if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(updated);
   }
+  toast('Credited ' + amount + ' GHS to ' + userId, 'success');
 }
 
-function loadAdminFunds() {
-  const reqs = getFundRequests();
+async function loadAdminFunds() {
+  const reqs = await getFundRequests();
   const tbody = document.getElementById('fundRequestsBody');
   tbody.innerHTML = reqs.map(r => `
     <tr>
@@ -2096,16 +2197,13 @@ function loadAdminFunds() {
 }
 
 let generatedFundLinkData = null;
-function generateFundLink() {
+async function generateFundLink() {
   const userId = document.getElementById('fundUserId').value.trim();
   const amount = document.getElementById('fundAmount').value;
   if (!userId || !amount) return toast('Please fill both fields', 'error');
   
-  // Create a claim code for this user
   const code = 'FUND' + Math.random().toString(36).substring(2, 8).toUpperCase();
-  const codes = getCodes();
-  codes.push({ code, amount: parseFloat(amount), used: false, usedBy: null, forUser: userId });
-  saveCodes(codes);
+  await supabase.from('claim_codes').insert({ code, amount: parseFloat(amount), used: false, usedBy: null, forUser: userId });
   
   const link = window.location.href.split('?')[0] + '?fund=' + code + '&uid=' + userId;
   generatedFundLinkData = link;
@@ -2116,14 +2214,8 @@ function generateFundLink() {
   toast('Fund link generated!', 'success');
 }
 
-function copyFundLink() {
-  if (generatedFundLinkData) {
-    navigator.clipboard.writeText(generatedFundLinkData).then(() => toast('Link copied!', 'success'));
-  }
-}
-
-function loadLoginActivity() {
-  const activity = getLoginActivity();
+async function loadLoginActivity() {
+  const activity = await getLoginActivity();
   const tbody = document.getElementById('loginActivityBody');
   if (!activity.length) {
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:32px">No login activity yet.</td></tr>';
@@ -2140,15 +2232,15 @@ function loadLoginActivity() {
   `).join('');
 }
 
-function clearLoginActivity() {
+async function clearLoginActivity() {
   if (!confirm('Clear all login activity logs?')) return;
-  saveLoginActivity([]);
+  await supabase.from('login_activity').delete().gte('id', 0);
   loadLoginActivity();
   toast('Login activity cleared', 'info');
 }
 
-function loadAdminCodes() {
-  const codes = getCodes();
+async function loadAdminCodes() {
+  const codes = await getCodes();
   const tbody = document.getElementById('claimCodesBody');
   tbody.innerHTML = codes.map(c => `
     <tr>
@@ -2160,16 +2252,16 @@ function loadAdminCodes() {
   `).join('');
 }
 
-function generateClaimCode() {
+async function generateClaimCode() {
   const codeInput = document.getElementById('newCodeInput').value.trim().toUpperCase();
   const amount = parseFloat(document.getElementById('newCodeAmount').value);
   if (!amount) return toast('Enter an amount', 'error');
   
   const code = codeInput || 'GB' + Math.random().toString(36).substring(2, 8).toUpperCase();
-  const codes = getCodes();
-  if (codes.find(c => c.code === code)) return toast('Code already exists', 'error');
-  codes.push({ code, amount, used: false, usedBy: null });
-  saveCodes(codes);
+  const { data: existing } = await supabase.from('claim_codes').select('code').eq('code', code).maybeSingle();
+  if (existing) return toast('Code already exists', 'error');
+
+  await supabase.from('claim_codes').insert({ code, amount, used: false, usedBy: null });
   
   document.getElementById('generatedCode').style.display = '';
   document.getElementById('generatedCodeText').textContent = code + ' · ' + amount + ' GHS';
@@ -2226,8 +2318,7 @@ function showPolicy(type) {
 }
 
 // ═══════════════════════════════════ INIT ═══════════════════════════════════
-function init() {
-  // Check URL params
+async function init() {
   const params = new URLSearchParams(window.location.search);
   const refParam = params.get('ref');
   const fundCode = params.get('fund');
@@ -2237,24 +2328,22 @@ function init() {
   
   // Auto-process fund link if present
   if (fundCode && fundUid) {
-    const user = getCurrentUser();
+    const user = await getCurrentUser();
     if (user && user.id === fundUid) {
-      const codes = getCodes();
-      const found = codes.find(c => c.code === fundCode && !c.used && (!c.forUser || c.forUser === fundUid));
-      if (found) {
-        found.used = true;
-        found.usedBy = user.id;
-        saveCodes(codes);
-        user.balance = +(user.balance + found.amount).toFixed(2);
-        updateUser(user);
-        updateNavUser(user);
+      const { data: found } = await supabase.from('claim_codes')
+        .select('*').eq('code', fundCode).eq('used', false).maybeSingle();
+      if (found && (!found.forUser || found.forUser === fundUid)) {
+        await supabase.from('claim_codes').update({ used: true, usedBy: user.id }).eq('code', fundCode);
+        const newBalance = +(user.balance + found.amount).toFixed(2);
+        await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+        updateNavUser({ ...user, balance: newBalance });
         setTimeout(() => toast('✅ ' + found.amount + ' GHS has been added to your wallet!', 'success'), 500);
       }
     }
   }
   
   // Restore logged in user
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   if (user) onUserLogin(user);
 }
 
