@@ -1400,7 +1400,7 @@ const SERVICES = {
 
 const SUPABASE_URL = 'https://urmoibcoryilntvgugao.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVybW9pYmNvcnlpbG50dmd1Z2FvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTU3MTUsImV4cCI6MjA5MzgzMTcxNX0.TxzsU03vik_qaTS96KCr0yY0Mt99buvTUx67z2bp5Zk';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ═══════════════════════════════════ STATE ═══════════════════════════════════
 let currentPlatform = '';
@@ -1412,31 +1412,31 @@ let logoClickTimer = null;
 
 // ─── DATA LAYER (Supabase) ───
 async function getUsers() {
-  const { data, error } = await supabase.from('users').select('*');
+  const { data, error } = await supabaseClient.from('users').select('*');
   if (error) { console.error('getUsers:', error); return []; }
   return data || [];
 }
 
 async function getOrders() {
-  const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
   if (error) { console.error('getOrders:', error); return []; }
   return data || [];
 }
 
 async function getCodes() {
-  const { data, error } = await supabase.from('claim_codes').select('*');
+  const { data, error } = await supabaseClient.from('claim_codes').select('*');
   if (error) { console.error('getCodes:', error); return []; }
   return data || [];
 }
 
 async function getFundRequests() {
-  const { data, error } = await supabase.from('fund_requests').select('*').order('id', { ascending: false });
+  const { data, error } = await supabaseClient.from('fund_requests').select('*').order('id', { ascending: false });
   if (error) { console.error('getFundRequests:', error); return []; }
   return data || [];
 }
 
 async function getLoginActivity() {
-  const { data, error } = await supabase.from('login_activity').select('*').order('id', { ascending: false }).limit(200);
+  const { data, error } = await supabaseClient.from('login_activity').select('*').order('id', { ascending: false }).limit(200);
   if (error) { console.error('getLoginActivity:', error); return []; }
   return data || [];
 }
@@ -1444,7 +1444,7 @@ async function getLoginActivity() {
 async function getCurrentUser() {
   const id = localStorage.getItem('gb_currentUser');
   if (!id) return null;
-  const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
+  const { data, error } = await supabaseClient.from('users').select('*').eq('id', id).single();
   if (error) return null;
   return data || null;
 }
@@ -1455,19 +1455,19 @@ function setCurrentUser(u) {
 }
 
 async function updateUser(updated) {
-  const { error } = await supabase.from('users').upsert(updated);
+  const { error } = await supabaseClient.from('users').upsert(updated);
   if (error) console.error('updateUser:', error);
 }
 
 async function logLoginActivity(type, user) {
-  await supabase.from('login_activity').insert({
+  await supabaseClient.from('login_activity').insert({
     time: new Date().toLocaleString(), type,
     userId: user.id, name: user.name, email: user.email
   });
 }
 
 async function generateId() {
-  const { count } = await supabase.from('users').select('*', { count: 'exact', head: true });
+  const { count } = await supabaseClient.from('users').select('*', { count: 'exact', head: true });
   return 'GB' + (1001 + (count || 0));
 }
 
@@ -1491,7 +1491,7 @@ async function registerUser() {
   if (pass.length < 6) return toast('Password must be at least 6 characters', 'error');
 
   // Check if email exists
-  const { data: existing } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
+  const { data: existing } = await supabaseClient.from('users').select('id').eq('email', email).maybeSingle();
   if (existing) return toast('Email already registered', 'error');
 
   const newId = await generateId();
@@ -1503,9 +1503,9 @@ async function registerUser() {
 
   // Handle referral
   if (refCode) {
-    const { data: referrer } = await supabase.from('users').select('*').eq('referralCode', refCode).maybeSingle();
+    const { data: referrer } = await supabaseClient.from('users').select('*').eq('referralCode', refCode).maybeSingle();
     if (referrer && referrer.referrals < 10) {
-      await supabase.from('users').update({
+      await supabaseClient.from('users').update({
         referrals: referrer.referrals + 1,
         referralEarned: +(referrer.referralEarned + 3).toFixed(2),
         balance: +(referrer.balance + 3).toFixed(2)
@@ -1514,7 +1514,7 @@ async function registerUser() {
     }
   }
 
-  const { error } = await supabase.from('users').insert(newUser);
+  const { error } = await supabaseClient.from('users').insert(newUser);
   if (error) { console.error(error); return toast('Registration failed. Try again.', 'error'); }
 
   setCurrentUser(newUser);
@@ -1529,7 +1529,7 @@ async function loginUser() {
   const pass = document.getElementById('loginPassword').value;
   if (!email || !pass) return toast('Please fill all fields', 'error');
 
-  const { data: user, error } = await supabase.from('users').select('*').eq('email', email).eq('password', pass).maybeSingle();
+  const { data: user, error } = await supabaseClient.from('users').select('*').eq('email', email).eq('password', pass).maybeSingle();
   if (error || !user) return toast('Invalid email or password', 'error');
 
   setCurrentUser(user);
@@ -1759,7 +1759,7 @@ async function placeOrder() {
   
   // Deduct balance
   const newBalance = +(user.balance - total).toFixed(2);
-  await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+  await supabaseClient.from('users').update({ balance: newBalance }).eq('id', user.id);
   const updatedUser = { ...user, balance: newBalance };
   updateNavUser(updatedUser);
   
@@ -1773,7 +1773,7 @@ async function placeOrder() {
     date: new Date().toLocaleDateString()
   };
   
-  await supabase.from('orders').insert(order);
+  await supabaseClient.from('orders').insert(order);
   
   // WhatsApp notification to admin
   const msg = encodeURIComponent(
@@ -1849,16 +1849,16 @@ async function doClaimCode(inputId) {
   const code = document.getElementById(inputId).value.trim().toUpperCase();
   if (!code) return toast('Please enter a code', 'error');
   
-  const { data: found, error } = await supabase.from('claim_codes')
+  const { data: found, error } = await supabaseClient.from('claim_codes')
     .select('*').eq('code', code).eq('used', false).maybeSingle();
   if (error || !found) return toast('Invalid or already used code', 'error');
   
   // Mark code as used
-  await supabase.from('claim_codes').update({ used: true, usedBy: user.id }).eq('code', code);
+  await supabaseClient.from('claim_codes').update({ used: true, usedBy: user.id }).eq('code', code);
   
   // Credit user
   const newBalance = +(user.balance + found.amount).toFixed(2);
-  await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+  await supabaseClient.from('users').update({ balance: newBalance }).eq('id', user.id);
   const updatedUser = { ...user, balance: newBalance };
   updateNavUser(updatedUser);
   
@@ -1902,13 +1902,13 @@ async function proceedToPaystack() {
   
   // Credit balance
   const newBalance = +(user.balance + amt).toFixed(2);
-  await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+  await supabaseClient.from('users').update({ balance: newBalance }).eq('id', user.id);
   const updatedUser = { ...user, balance: newBalance };
   updateNavUser(updatedUser);
   if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(updatedUser);
   
   // Log fund request
-  await supabase.from('fund_requests').insert({ userId: user.id, userName: user.name, amount: amt, time: new Date().toLocaleString(), status: 'Completed' });
+  await supabaseClient.from('fund_requests').insert({ userId: user.id, userName: user.name, amount: amt, time: new Date().toLocaleString(), status: 'Completed' });
   
   // Notify admin
   const msg = encodeURIComponent(`💰 FUND ADDED — Global Booster\n\nUser: ${user.name}\nID: ${user.id}\nAmount: ${amt} GHS\nTime: ${new Date().toLocaleString()}\n\nFunds have been credited to the user's account.`);
@@ -1926,13 +1926,13 @@ async function confirmAddFunds() {
   
   // Credit balance
   const newBalance = +(user.balance + amt).toFixed(2);
-  await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+  await supabaseClient.from('users').update({ balance: newBalance }).eq('id', user.id);
   const updatedUser = { ...user, balance: newBalance };
   updateNavUser(updatedUser);
   if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(updatedUser);
   
   // Log fund request
-  await supabase.from('fund_requests').insert({ userId: user.id, userName: user.name, amount: amt, time: new Date().toLocaleString(), status: 'Completed' });
+  await supabaseClient.from('fund_requests').insert({ userId: user.id, userName: user.name, amount: amt, time: new Date().toLocaleString(), status: 'Completed' });
   
   setTimeout(() => { window.open(PAYSTACK_URL + '?ref=' + user.id + '&amount=' + amt, '_blank'); }, 500);
   closeModal('addFundsModal');
@@ -2068,7 +2068,7 @@ async function loadAdminOrders() {
 }
 
 async function updateOrderStatus(orderId, status) {
-  const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+  const { error } = await supabaseClient.from('orders').update({ status }).eq('id', orderId);
   if (!error) { loadAdminOrders(); toast('Order updated', 'success'); }
 }
 
@@ -2110,10 +2110,10 @@ async function loadAdminUsers() {
 async function adminDebitUser(userId) {
   const amount = prompt('Enter amount to DEBIT from ' + userId + ' (GHS):');
   if (!amount || isNaN(amount) || parseFloat(amount) <= 0) return;
-  const { data: u } = await supabase.from('users').select('*').eq('id', userId).single();
+  const { data: u } = await supabaseClient.from('users').select('*').eq('id', userId).single();
   if (!u) return;
   const newBalance = Math.max(0, +(u.balance - parseFloat(amount)).toFixed(2));
-  await supabase.from('users').update({ balance: newBalance }).eq('id', userId);
+  await supabaseClient.from('users').update({ balance: newBalance }).eq('id', userId);
   loadAdminUsers();
   const cu = await getCurrentUser();
   if (cu && cu.id === userId) {
@@ -2168,10 +2168,10 @@ async function viewUserDetail(userId) {
 async function adminCreditUser(userId) {
   const amount = prompt('Enter amount to credit to ' + userId + ' (GHS):');
   if (!amount || isNaN(amount)) return;
-  const { data: u } = await supabase.from('users').select('*').eq('id', userId).single();
+  const { data: u } = await supabaseClient.from('users').select('*').eq('id', userId).single();
   if (!u) return;
   const newBalance = +(u.balance + parseFloat(amount)).toFixed(2);
-  await supabase.from('users').update({ balance: newBalance }).eq('id', userId);
+  await supabaseClient.from('users').update({ balance: newBalance }).eq('id', userId);
   loadAdminUsers();
   const cu = await getCurrentUser();
   if (cu && cu.id === userId) {
@@ -2203,7 +2203,7 @@ async function generateFundLink() {
   if (!userId || !amount) return toast('Please fill both fields', 'error');
   
   const code = 'FUND' + Math.random().toString(36).substring(2, 8).toUpperCase();
-  await supabase.from('claim_codes').insert({ code, amount: parseFloat(amount), used: false, usedBy: null, forUser: userId });
+  await supabaseClient.from('claim_codes').insert({ code, amount: parseFloat(amount), used: false, usedBy: null, forUser: userId });
   
   const link = window.location.href.split('?')[0] + '?fund=' + code + '&uid=' + userId;
   generatedFundLinkData = link;
@@ -2234,7 +2234,7 @@ async function loadLoginActivity() {
 
 async function clearLoginActivity() {
   if (!confirm('Clear all login activity logs?')) return;
-  await supabase.from('login_activity').delete().gte('id', 0);
+  await supabaseClient.from('login_activity').delete().gte('id', 0);
   loadLoginActivity();
   toast('Login activity cleared', 'info');
 }
@@ -2258,10 +2258,10 @@ async function generateClaimCode() {
   if (!amount) return toast('Enter an amount', 'error');
   
   const code = codeInput || 'GB' + Math.random().toString(36).substring(2, 8).toUpperCase();
-  const { data: existing } = await supabase.from('claim_codes').select('code').eq('code', code).maybeSingle();
+  const { data: existing } = await supabaseClient.from('claim_codes').select('code').eq('code', code).maybeSingle();
   if (existing) return toast('Code already exists', 'error');
 
-  await supabase.from('claim_codes').insert({ code, amount, used: false, usedBy: null });
+  await supabaseClient.from('claim_codes').insert({ code, amount, used: false, usedBy: null });
   
   document.getElementById('generatedCode').style.display = '';
   document.getElementById('generatedCodeText').textContent = code + ' · ' + amount + ' GHS';
@@ -2330,12 +2330,12 @@ async function init() {
   if (fundCode && fundUid) {
     const user = await getCurrentUser();
     if (user && user.id === fundUid) {
-      const { data: found } = await supabase.from('claim_codes')
+      const { data: found } = await supabaseClient.from('claim_codes')
         .select('*').eq('code', fundCode).eq('used', false).maybeSingle();
       if (found && (!found.forUser || found.forUser === fundUid)) {
-        await supabase.from('claim_codes').update({ used: true, usedBy: user.id }).eq('code', fundCode);
+        await supabaseClient.from('claim_codes').update({ used: true, usedBy: user.id }).eq('code', fundCode);
         const newBalance = +(user.balance + found.amount).toFixed(2);
-        await supabase.from('users').update({ balance: newBalance }).eq('id', user.id);
+        await supabaseClient.from('users').update({ balance: newBalance }).eq('id', user.id);
         updateNavUser({ ...user, balance: newBalance });
         setTimeout(() => toast('✅ ' + found.amount + ' GHS has been added to your wallet!', 'success'), 500);
       }
